@@ -1,0 +1,72 @@
+import pandas as pd
+#一、读取信息并存储
+#读取评论者信息，并存储为dataframe
+unames = ['user_id', 'gender', 'age', 'occupation', 'zip']
+users = pd.read_table('datasets/movielens/users.dat', sep='::',engine='python',
+                      header=None, names=unames)
+
+#读取电影评分信息，并存储为dataframe
+rnames = ['user_id', 'movie_id', 'rating', 'timestamp']
+ratings = pd.read_table('datasets/movielens/ratings.dat', sep='::',engine='python',
+                        header=None, names=rnames)
+
+#读取电影信息，并存储为dataframe
+mnames = ['movie_id', 'title', 'genres']
+movies = pd.read_table('datasets/movielens/movies.dat', sep='::',engine='python',
+                       header=None, names=mnames)
+                       
+#可以试着显示三个dataframe信息，movies[:5]
+
+#二、将movies的“电影类型”列进行原子化，提取出不同的类型名作为新列，如果某个电影属于这个类型，令类型值为1，否则为0
+#提取所有不同的电影类型到types
+list=[]
+for ts in movies.genres:
+    list.extend(a for a in ts.split(sep='|'))
+types=np.unique(list)
+
+#创建新的dataframe，存储各个电影的类型，行数为movies表格中的记录数，列数为电影类型数量
+df=pd.DataFrame(np.random.rand(len(movies),18),columns=types)
+df.iloc[:]=np.nan
+df=df.fillna(0)
+
+#依次遍历每个movie的genres（长类型），把它转化成短类型，并记录在df中
+num=0 #num是用来计数，对应每个movie的行索引
+for ts in movies.genres:#ts是每个电影的长类型
+    for i in ts.split(sep='|'):#i是长类型的子类型
+        if i in types :
+            df.loc[num,i]=1
+        else:
+            df.loc[num,i]=0
+    num+=1
+
+#将短类型df表格和movies表进行合并，join默认按照index进行列合并
+movies_new=movies.join(df).drop('genres',axis=1)
+
+#三、分析男女最喜欢的电影
+#合并三张表，merge默认以相同列明为索引进行列合并。
+data=pd.merge(pd.merge(ratings,movies_new,on='movie_id'),users,on='user_id')
+
+#按性别计算每部电影的评分,df.pivot_table,默认aggfunc为mean
+sex_meanrating=data.pivot_table('rating',index='title', columns='gender',aggfunc='mean')
+sex_meanrating.head()
+
+#过滤掉评分不够250个的电影
+ratings_bytitle=data.groupby('title').size()
+active_titles=ratings_bytitle.index[ratings_bytitle>=250]#index仅显示索引
+sex_active=sex_meanrating.loc[active_titles]
+print(sex_active)
+
+#受女性欢迎的电影
+sex_active.sort_values(by='F',ascending=0)
+
+#受男性欢迎的电影
+sex_active.sort_values(by='M',ascending=0)
+
+#男女分歧最大且更受女性欢迎的电影
+sex_active['diff']=sex_active['F']-sex_active['M']
+sex_active.sort_values(by='diff')[-10:]
+
+#分歧最大不考虑男女
+disagree=data.groupby('title')['rating'].std()
+disagree=disagree.loc[active_titles]
+disagree.sort_values(ascending=False)[:10]
